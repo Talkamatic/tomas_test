@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<grammar>
+
+  <action name="top">
+    <one-of>
+      <item>början</item>
+      <item>huvudmeny</item>
+      <item>sådär</item>
+      <item>börja om</item>
+      <item>börja om igen</item>
+    </one-of>
+  </action>
+
+  <action name="up">
+    <one-of>
+      <item>gå tillbaka</item>
+      <item>tillbaka</item>
+    </one-of>
+  </action>
+
+</grammar>

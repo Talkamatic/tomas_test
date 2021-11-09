@@ -1,0 +1,102 @@
+pipeline {
+    agent {label 'docker'}
+    options {
+        buildDiscarder(
+            logRotator(
+                artifactDaysToKeepStr: '',
+                artifactNumToKeepStr: '',
+                daysToKeepStr: '',
+                numToKeepStr: '10'
+            )
+        )
+        timestamps()
+        timeout(time: 15, unit: 'MINUTES')
+    }
+    triggers {
+        gerrit(
+            customUrl: '',
+            gerritProjects:[
+                [
+                    branches: [
+                        [
+                            compareType: 'ANT',
+                            pattern: 'master'
+                        ]
+                    ],
+                    compareType: 'PLAIN',
+                    disableStrictForbiddenFileVerification: false,
+                    pattern: 'tomas_test'
+                ]
+            ],
+            serverName: 'Talkamatic',
+            triggerOnEvents: [
+                refUpdated()
+            ],
+            skipVote: [
+              onSuccessful: false,
+              onFailed    : false,
+              onUnstable  : false,
+              onNotBuilt  : false
+            ]
+        )
+    }
+    stages {
+        stage('checkout') {
+            steps {
+                sh "rm -rf *"
+                script {
+                    checkout(
+                        changelog: false,
+                        poll: false,
+                        scm: [
+                            $class: 'GitSCM',
+                            branches: [
+                                [name: 'refs/heads/master']
+                            ],
+                            doGenerateSubmoduleConfigurations: false,
+                            extensions: [],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [
+                                [
+                                    credentialsId: 'jenkinsatgerrit',
+                                    refspec: 'refs/heads/master',
+                                    url: 'ssh://jenkins@gerrit.talkamatic.se:29418/tomas_test'
+                                ]
+                            ]
+                        ]
+                    )
+                    env.COMMIT_HASH = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
+                }
+            }
+        }
+
+        stage('build & push HTTP service') {
+            steps {
+                script {
+                    def image = docker.build("ipv6-art-project/tomas-test-http-service", "-f Dockerfile-http-service .")
+                    docker.withRegistry('https://eu.gcr.io', 'gcr:ipv6-google-container-registry') {
+                        image.push("${env.COMMIT_HASH}")
+                        image.push("master")
+                    }
+                }
+            }
+        }
+
+        stage('deploy HTTP service') {
+            steps {
+                build job: 'deploy-containers', parameters: [
+                    [
+                        $class: 'StringParameterValue',
+                        name: 'IMAGE',
+                        value: "tomas-test-http-service"
+                    ],
+                    [
+                        $class: 'StringParameterValue',
+                        name: 'COMMIT',
+                        value: "${env.COMMIT_HASH}"
+                    ]
+                ]
+            }
+        }
+    }
+}

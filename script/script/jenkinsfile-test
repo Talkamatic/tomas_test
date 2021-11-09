@@ -1,0 +1,101 @@
+pipeline {
+    agent { label 'docker' }
+
+    parameters {
+        string(
+            defaultValue: 'refs/heads/master',
+            description: 'The Git reference used in checkout',
+            name: 'GERRIT_REFSPEC'
+        )
+    }
+
+    options {
+        buildDiscarder(
+            logRotator(
+                artifactDaysToKeepStr: '',
+                artifactNumToKeepStr: '',
+                daysToKeepStr: '',
+                numToKeepStr: '10'
+            )
+        )
+        timestamps()
+        timeout(time: 1, unit: 'HOURS')
+    }
+
+    triggers {
+        gerrit(
+            customUrl: '',
+            gerritProjects:[
+                [
+                    branches: [
+                        [
+                            compareType: 'ANT',
+                            pattern: '**'
+                        ]
+                    ],
+                    compareType: 'PLAIN',
+                    disableStrictForbiddenFileVerification: false,
+                    pattern: 'tomas_test'
+                ]
+            ],
+            serverName: 'Talkamatic',
+            triggerOnEvents: [
+                patchsetCreated(
+                    excludeDrafts: true,
+                    excludeNoCodeChange: false,
+                    excludeTrivialRebase: false
+                )
+            ],
+            skipVote: [
+              onSuccessful: false,
+              onFailed    : false,
+              onUnstable  : false,
+              onNotBuilt  : false
+            ]
+        )
+    }
+
+    stages {
+        stage('checkout') {
+            steps {
+                sh "rm -rf *"
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [
+                        [name: '$GERRIT_BRANCH']
+                    ],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [
+                        [
+                            $class: 'BuildChooserSetting',
+                            buildChooser: [
+                                $class: 'GerritTriggerBuildChooser'
+                            ]
+                        ]
+                    ],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [[
+                        credentialsId: 'jenkinsatgerrit',
+                        refspec: '$GERRIT_REFSPEC',
+                        url: 'ssh://jenkins@gerrit.talkamatic.se:29418/tomas_test'
+                    ]]
+                ])
+            }
+        }
+
+        stage('build') {
+            agent {
+                docker {
+                    image 'eu.gcr.io/ipv6-art-project/tdm:candidate'
+                    alwaysPull true
+                    reuseNode true
+                    registryUrl 'https://eu.gcr.io'
+                    registryCredentialsId 'gcr:ipv6-google-container-registry'
+                }
+            }
+            steps {
+                sh 'tdm build'
+            }
+        }
+    }
+}
