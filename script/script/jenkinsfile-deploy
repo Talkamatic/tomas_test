@@ -92,6 +92,11 @@ pipeline {
                     ],
                     [
                         $class: 'StringParameterValue',
+                        name: 'TAG',
+                        value: "master"
+                    ],
+                    [
+                        $class: 'StringParameterValue',
                         name: 'COMMIT',
                         value: "${env.COMMIT_HASH}"
                     ]
